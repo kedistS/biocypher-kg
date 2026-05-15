@@ -17,3 +17,4 @@ relationships:
     target: gene
     properties:
       score: float
+      confidence: float

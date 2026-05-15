@@ -18,4 +18,5 @@ relationships:
     target: gene
     properties:
       score: float
+      confidence: float
       biological_context: str

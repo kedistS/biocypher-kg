@@ -3,7 +3,7 @@ import gzip
 import pickle
 
 from biocypher_metta.adapters import Adapter
-from biocypher_metta.adapters.helpers import build_regulatory_region_id, check_genomic_location, to_float
+from biocypher_metta.adapters.helpers import build_percentile_rank_map, build_regulatory_region_id, check_genomic_location, clamp_0_1, to_float
 from biocypher_metta.processors import HGNCProcessor
 # Example PEREGRINE input files:
 
@@ -31,7 +31,18 @@ class PEREGRINEAdapter(Adapter):
     ALLOWED_TYPES = ['enhancer', 'enhancer to gene association']
     ALLOWED_LABELS = ['enhancer', 'enhancer_gene']
     ALLOWED_KEYS = []
-    INDEX = {'enhancer': 0, 'gene': 1, 'tissue': 4, 'score': 7, 'chr': 0, 'start': 1, 'end': 2, 'id': 3}
+    INDEX = {
+        'enhancer': 0,
+        'gene': 1,
+        'assay': 3,
+        'tissue': 4,
+        'score': 7,
+        'cdf_score': 9,
+        'chr': 0,
+        'start': 1,
+        'end': 2,
+        'id': 3,
+    }
 
     def __init__(self, enhancers_file, enhancer_gene_link,
                  source_file, hgnc_ensembl_map=None,
@@ -120,7 +131,32 @@ class PEREGRINEAdapter(Adapter):
                 if check_genomic_location(self.chr, self.start, self.end, chr, start, end):
                     region_id = build_regulatory_region_id(chr, start, end)
                     enhancer_id_map[id] = region_id
-        
+
+        scores_by_context = {}
+        with gzip.open(self.enhancer_gene_link, 'rt') as f:
+            reader = csv.reader(f, delimiter=self.delimiter)
+            next(reader)    # Skip header
+            for line in reader:
+                id = line[self.INDEX['enhancer']]
+                if id not in enhancer_id_map:
+                    continue
+
+                tissue_id = line[self.INDEX['tissue']]
+                if tissue_id not in self.tissue_ontology_map:
+                    continue
+
+                if self.INDEX['score'] >= len(line) or not line[self.INDEX['score']]:
+                    continue
+
+                assay_id = line[self.INDEX['assay']]
+                score = to_float(line[self.INDEX['score']])
+                scores_by_context.setdefault((assay_id, tissue_id), []).append(score)
+
+        confidence_by_context_score = {
+            context: build_percentile_rank_map(scores)
+            for context, scores in scores_by_context.items()
+        }
+
         with gzip.open(self.enhancer_gene_link, 'rt') as f:
             reader = csv.reader(f, delimiter=self.delimiter)
             next(reader)    # Skip header
@@ -139,6 +175,9 @@ class PEREGRINEAdapter(Adapter):
                 score = None
                 if self.INDEX['score'] < len(line):
                     score = line[self.INDEX['score']]
+                cdf_score = None
+                if self.INDEX['cdf_score'] < len(line):
+                    cdf_score = line[self.INDEX['cdf_score']]
                 if tissue_id not in self.tissue_ontology_map:
                     continue
 
@@ -146,7 +185,13 @@ class PEREGRINEAdapter(Adapter):
                 if self.write_properties:
                     props['biological_context'] = self.tissue_ontology_map[tissue_id][0]
                     if score:
-                        props['score'] = to_float(score)
+                        score = to_float(score)
+                        props['score'] = score
+                        if cdf_score:
+                            props['confidence'] = clamp_0_1(to_float(cdf_score))
+                        else:
+                            assay_id = line[self.INDEX['assay']]
+                            props['confidence'] = confidence_by_context_score[(assay_id, tissue_id)][score]
 
                     if self.add_provenance:
                         props['source'] = self.source

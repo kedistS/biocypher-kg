@@ -2,7 +2,7 @@ import gzip
 import os
 import pickle
 from biocypher_metta.adapters import Adapter
-from biocypher_metta.adapters.helpers import build_regulatory_region_id, check_genomic_location, to_float
+from biocypher_metta.adapters.helpers import build_percentile_rank_map, build_regulatory_region_id, check_genomic_location, to_float
 
 # There are data for CEL, DMEL MMU, RNO & others, but the site is frequently unavailable :-()
 # Human data:
@@ -93,6 +93,14 @@ class EnhancerAtlasAdapter(Adapter):
             tissue_file_path = os.path.join(self.enhancer_gene_filepath, tissue)
             biological_context = tissues_ontology_map.get(tissue.replace('_EP.txt', ''))
             if biological_context:
+                scores = []
+                with open(tissue_file_path, 'r') as f:
+                    for line in f:
+                        info = line.strip().split('\t')
+                        if len(info) > 1:
+                            scores.append(to_float(info[1]))
+                confidence_by_score = build_percentile_rank_map(scores)
+
                 with open(tissue_file_path, 'r') as f:
                     for line in f:
                         info = line.strip().split('\t')
@@ -105,6 +113,7 @@ class EnhancerAtlasAdapter(Adapter):
                             if self.write_properties:
                                 props['biological_context'] = biological_context
                                 props['score'] = score
+                                props['confidence'] = confidence_by_score[score]
                                 if self.add_provenance:
                                     props['source'] = self.source
                                     props['source_url'] = self.source_url

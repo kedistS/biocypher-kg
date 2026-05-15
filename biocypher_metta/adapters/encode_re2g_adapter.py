@@ -1,6 +1,6 @@
 import gzip
 from biocypher_metta.adapters import Adapter
-from biocypher_metta.adapters.helpers import build_regulatory_region_id, check_genomic_location
+from biocypher_metta.adapters.helpers import build_regulatory_region_id, check_genomic_location, clamp_0_1
 
 # Human data:
 # https://www.encodeproject.org/
@@ -93,6 +93,7 @@ class ENCODERe2GAdapter(Adapter):
                 if self.write_properties:
                     props = {
                         "score": score,
+                        "confidence": clamp_0_1(score),
                         "biological_context": biological_context,
                         "taxon_id": self.taxon_id,
                     }

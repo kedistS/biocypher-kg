@@ -1961,6 +1961,9 @@ enhancer to gene association:
     score: 
       type: float
       biolink: has_quantitative_value
+    confidence:
+      type: float
+      biolink: has_quantitative_value
     biological_context: 
       type: str
       biolink: has_biological_sequence
@@ -2435,6 +2438,9 @@ enhancer activity by contact:
       type: float
       biolink: has_quantitative_value
     score:
+      type: float
+      biolink: has_quantitative_value
+    confidence:
       type: float
       biolink: has_quantitative_value
     distance:

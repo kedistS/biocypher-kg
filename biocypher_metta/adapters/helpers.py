@@ -1,5 +1,6 @@
 from inspect import getfullargspec
 import hashlib
+from bisect import bisect_left, bisect_right
 from math import log10, floor, isinf
 from liftover import get_lifter
 
@@ -116,6 +117,34 @@ def to_float(str):
             number = number / float(f'1e{abs(exponent) - MAX_EXPONENT}')
 
     return number
+
+
+def clamp_0_1(number):
+    return max(0.0, min(1.0, number))
+
+
+def build_percentile_rank_map(values):
+    """
+    Build source-local confidence values from raw scores.
+
+    Tied scores receive the same average percentile rank. For a single score in
+    a context, return 1.0 because it is the highest observed value there.
+    """
+    values = sorted(values)
+    if not values:
+        return {}
+
+    if len(values) == 1:
+        return {values[0]: 1.0}
+
+    ranks = {}
+    for value in set(values):
+        left = bisect_left(values, value)
+        right = bisect_right(values, value)
+        average_rank = (left + right - 1) / 2
+        ranks[value] = clamp_0_1(average_rank / (len(values) - 1))
+
+    return ranks
 
 
 def check_genomic_location(chr, start, end,

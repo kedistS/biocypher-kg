@@ -236,6 +236,128 @@ dispatch), uploads the JSON report as an artifact, and opens an issue when sourc
 Until those baselines are seeded (copy a real download run's `versions.json` there), the job is a
 quiet no-op pass.
 
+## Quick start: verify dataset versioning locally
+
+This section shows how to verify that dataset version tracking works after making
+changes to a data source configuration.
+
+### 1. Run the downloader
+
+Download datasets using the configured species sources:
+
+```bash
+uv run python -m biocypher_dataset_downloader.download_data \
+  --config config/hsa/hsa_data_source_config.yaml \
+  --output-dir <download_directory>
+```
+
+After a successful run, the output directory should contain:
+
+```
+<download_directory>/
+├── download_manifest.json
+└── versions.json
+```
+
+`download_manifest.json` contains the provenance information captured during the
+download process.
+
+`versions.json` stores the historical version records for each source.
+
+---
+
+### 2. Inspect recorded versions
+
+Check the resolved dataset versions:
+
+```bash
+cat <download_directory>/versions.json
+```
+
+Example:
+
+```json
+{
+  "gencode": [
+    {
+      "version": "v49",
+      "vtype": "sequential"
+    }
+  ]
+}
+```
+
+---
+
+### 3. Check for dataset changes
+
+Run the version checker:
+
+```bash
+uv run python -m biocypher_dataset_downloader.versioning.cli \
+  --species hsa \
+  --versions-root <download_directory>
+```
+
+The command reports the current status of each source:
+
+| Status | Meaning |
+|---|---|
+| `up-to-date` | The recorded version matches the current version |
+| `CHANGED` | An `http_head` source has changed metadata |
+| `drift` | The configured version differs from the recorded version |
+| `unknown` | No baseline version exists |
+| `error` | Version resolution failed |
+
+---
+
+### 4. Common troubleshooting
+
+#### Version is unknown
+
+Sources without an explicit version strategy use `http_head`.
+In this case, the system tracks file metadata changes instead of a version number.
+
+#### Regex does not match
+
+For sources using `url_regex`, verify that:
+
+- the pattern contains exactly one capture group
+- the URL contains the expected version string
+
+Example configuration:
+
+```yaml
+version:
+  strategy: url_regex
+  pattern: 'gencode\.(v\d+)\.'
+```
+
+Matches:
+
+```
+gencode.v49.annotation.gtf.gz
+```
+
+---
+
+### 5. Verify provenance in the generated graph
+
+After building the knowledge graph, inspect:
+
+```
+graph_info.json
+```
+
+The `datasets[]` section should contain:
+
+- dataset name
+- version
+- source URL
+- checksum information
+- citation and license metadata
+
+This confirms that the generated knowledge graph contains the provenance information needed for reproducibility.
 ## Neo4j lineage
 
 When the versioned Neo4j loader finalizes a build, each `KGVersion` node records the upstream
